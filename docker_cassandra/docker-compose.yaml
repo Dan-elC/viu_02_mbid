@@ -1,0 +1,13 @@
+services:
+  cassandra:
+    image: cassandra:5.0.6
+    container_name: cassandra
+    ports:
+      - "9042:9042"
+    volumes:
+      # Los datos se guardarán en la carpeta 'data' que creaste
+      - ./data:/var/lib/cassandra
+      # Tus scripts .cql irán en la carpeta 'scripts'
+      - ./scripts:/scripts
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster
