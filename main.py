@@ -380,8 +380,6 @@ while (numero != 0):
 
 
     numero = int(input())  # Pedimos numero al usuario
-
-
     if   (numero == 1):
         insertar_cancion()
     elif (numero == 2):
@@ -407,8 +405,7 @@ while (numero != 0):
     elif (numero == 12):
         consulta_tabla5()
     elif (numero == 13):
-        consulta_tabla6()
-    
+        consulta_tabla6()    
     else:
         print("Número incorrecto")
 
