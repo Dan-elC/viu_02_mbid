@@ -2,12 +2,6 @@ from cassandra.cluster import Cluster
 import datetime
 from datetime import date
 
-# cluster = Cluster()
-# session = cluster.connect('danelcampana')
-# session = cluster.connect()
-# print(session.execute("SELECT release_version FROM system.local").one())
-
-
 
 class Usuario:
 
@@ -100,6 +94,7 @@ def insertar_cancion():
     print("Canción insertada correctamente.")
 
 
+
 # -------- Usuario en tabla de consulta 1 --------
 def insertar_usuario():
     # Pedimos al usuario que ingrese los datos
@@ -121,104 +116,236 @@ def insertar_usuario():
 
 
 
-# ------------ 2
-
-# CREATE TABLE danelcampana.Tabla2 (
-    
-#     grabacion_cod text,         -- PK: Clave de búsqueda (cod), ya que satisface la segunda consulta de búsqueda por código de grabación
-#     usuario_dni text,           -- CK: Clave de unicidad y ordenamiento, ya que el DNI de la persona es único y no se repite.    
-#     grabacion_fecha date,       -- Se genera el atributo fecha de la relación entre grabación y usuario
-#     usuario_nombre text,        -- Nombre del usuario
-#     usuario_calle text,         -- Nombre de la calle del usuario
-#     usuario_ciudad text,        -- Nombre de la ciudad del usuario
-#     grabacion_duracion int,     -- Duración de la grabación. Asumo que son segundos (int).  No es información del usuario pero ayuda a identificar si la grabación es correcta.
-#     grabacion_tipo text,        -- Tipo de la grabación. No es información del usuario pero ayuda a identificar si la grabación es correcta.
-    
-#     PRIMARY KEY (grabacion_cod, usuario_dni)
-# ) WITH CLUSTERING ORDER BY (usuario_dni ASC);
-
-# -------------- 6
-
-# CREATE TABLE danelcampana.Tabla6 (
-    
-#     grabacion_fecha date,        -- PK: Clave de búsqueda (la fecha de guardado). Campo por el cual se realizará la búsqueda
-#     grabacion_cod text,          -- CKs: Para un mejor ordenamiento se toma el cod como CK, ya que se necesita la grabación.
-#     usuario_dni text,            -- CKs: Para un mejor ordenamiento se toma el DNI como CK, ya que se necesita información del usuario.
-#     grabacion_duracion INT,      -- Campos extras de duración de la grabación
-#     grabacion_tipo text,         -- Campos extras de tipo de la grabación
-#     usuario_nombre text,         -- Campos extras de nombre del usuario
-#     usuario_calle text,          -- Campos extras de calle del usuario
-#     usuario_ciudad text,         -- Campos extras de ciudad del usuario
-#     -- La información del usuario y grabación ayudan a identificar si es el resultado esperado.
-    
-#     PRIMARY KEY (grabacion_fecha, grabacion_cod, usuario_dni)
-# ) WITH CLUSTERING ORDER BY (grabacion_cod ASC, usuario_dni ASC);
-
-
-
+# -------- Relación es_guardada_por (consultas 2 y 6) --------
 def insertar_relacion_es_guardada_por():
 
-    dni     = input("DNI: ")
-    nombre  = input("Nombre: ")
-    calle   = input("Calle: ")
-    ciudad  = input("Ciudad: ")
+    usuario_dni = input("DNI: ")
 
-    cod         = input("Código: ")
-    duracion    = input("Duración: ")
-    while not duracion.isnumeric():
-        duracion = input("Duración: ")
-    duracion = int(duracion)
-    tipo        = input("Tipo: ")
+    grabacion_cod         = input("Código de grabación: ")
+    grabacion_duracion    = input("Duración de grabación: ")
+    while not grabacion_duracion.isnumeric():
+        grabacion_duracion = input("Duración de grabación: ")
+    grabacion_duracion = int(grabacion_duracion)
+    grabacion_tipo        = input("Tipo de grabación: ")
 
     hoy = date.today()
 
-    usuario = consultar_usuario_por_dni(dni)
+    usuario = consultar_usuario_por_dni(usuario_dni)
     if (usuario != None):
-        insertStatementUsuarioGrabacion = session.prepare(
+        insertStatementTabla2 = session.prepare(
             "INSERT INTO Tabla2 (grabacion_cod, usuario_dni, grabacion_fecha, usuario_nombre, usuario_calle, usuario_ciudad, grabacion_duracion, grabacion_tipo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        insertStatementFechaGrabacionUsuario = session.prepare(
+        insertStatementTabla6 = session.prepare(
             "INSERT INTO Tabla6 (grabacion_fecha, grabacion_cod, usuario_dni, grabacion_duracion, grabacion_tipo, usuario_nombre, usuario_calle, usuario_ciudad) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
 
-        session.execute(insertStatementUsuarioGrabacion,
-                        [cod, dni, hoy, nombre, calle, ciudad, duracion, tipo])
-        session.execute(insertStatementFechaGrabacionUsuario,
-                        [hoy, cod, dni, duracion, tipo, nombre, calle, ciudad])
+        session.execute(insertStatementTabla2,
+                        [grabacion_cod, usuario_dni, hoy, usuario.usuario_nombre, usuario.usuario_calle, usuario.usuario_ciudad, grabacion_duracion, grabacion_tipo])
+        session.execute(insertStatementTabla6,
+                        [hoy, grabacion_cod, usuario_dni, grabacion_duracion, grabacion_tipo, usuario.usuario_nombre, usuario.usuario_calle, usuario.usuario_ciudad])
         print()
     else:
-        print("No existe el usuario con dni " + dni)
+        print("No existe el usuario con dni " + usuario_dni)
         print()
 
 
 
-# --- Creación de funciones de actualización de datos
+# -------- Relación conjunta es_interpretada_por y es_de (consultas 3 y 4) --------
+def insertar_relacion_es_interpretada_por_es_de():
+    cancion_isrc    = input("ISRC de canción: ")
+    artista_cod     = input("Cod de artista: ")
+    artista_cod     = int(artista_cod)
+    pais_nombre     = input("Nombre de país: ")
+    pais_cod        = input("Cod de país: ")
+    pais_cod        = int(pais_cod)
+    # cancion_titulo  = input("Título de canción: ")
 
-def actualizar_nombre_usuario(session):
-    """Actualiza nombre en base al DNI (Consulta 1)[cite: 112]."""
-    dni = input("DNI del usuario a modificar: ")
-    nuevo_nombre = input("Nuevo nombre: ")
+    artista_nombre  = input("Nombre artista: ")
+    artista_premios = set()
+    premio = input("Nombre de premio (espacio para terminar): ")
+    while premio != " ":
+        artista_premios.add(premio)
+        premio = input("Nombre de premio (espacio para terminar): ")
+
+    # Se valida si la canción existe
+    cancion = consultar_cancion_por_isrc(cancion_isrc)
+    if(cancion != None):
+        insertStatementTabla3 = session.prepare(
+            """INSERT INTO Tabla3
+            (cancion_isrc, artista_cod, pais_nombre, pais_cod, cancion_titulo)
+            VALUES (?, ?, ?, ?, ?)"""
+        )
+        insertStatementTabla4 = session.prepare(
+            """INSERT INTO Tabla4
+            (pais_cod, artista_cod, artista_nombre, artista_premios, pais_nombre)
+            VALUES (?, ?, ?, ?, ?)"""
+        )
+
+        session.execute(insertStatementTabla3, [cancion_isrc, artista_cod, pais_nombre, pais_cod, cancion.cancion_titulo])
+        session.execute(insertStatementTabla4, [pais_cod, artista_cod, artista_nombre, artista_premios, pais_nombre])
+
+    else:
+        print("No existe la cancion con isrc " + cancion_isrc)
+        print()
+
+
+
+
+
+# -------- Actualizar el nombre de un usuario en base a su DNI. (Consulta 1) --------
+def actualizar_nombre_usuario():
+    usuario_dni     = input("DNI del usuario a modificar: ")
+
+    usuario = consultar_usuario_por_dni(usuario_dni)
+    if(usuario != None):
+        nuevo_nombre = input("Ingresa el nuevo nombre: ")
+
+        deleteStatementTabla1 = session.prepare(
+            """DELETE FROM Tabla1 WHERE usuario_dni = ? and usuario_nombre = ?"""
+        )
+        insertStatementTabla1 = session.prepare(
+            """INSERT INTO Tabla1
+            (usuario_nombre, usuario_dni, usuario_calle, usuario_ciudad)
+            VALUES (?, ?, ?, ?)"""
+        )
+        session.execute(deleteStatementTabla1, [usuario_dni, usuario.usuario_nombre])
+        session.execute(insertStatementTabla1, [nuevo_nombre, usuario_dni, usuario.usuario_calle, usuario.usuario_ciudad])
+    else:
+        print("No existe el usuario con dni " + usuario_dni)
+        print()
     
-    # Nota: En Cassandra, si el nombre es parte de la PK (Partition Key), 
-    # se debe borrar e insertar de nuevo o usar tablas soporte[cite: 113].
-    query = "UPDATE Tabla1 SET Usuario_nombre = %s WHERE usuario_dni = %s"
-    # Este comando asume que se creó una tabla soporte o el DNI es la única PK.
-    session.execute(query, (nuevo_nombre, dni))
-    print("Nombre actualizado.")
+
 
 
 # --- Creación de funciones de borrado de datos
-
-def borrar_grabaciones_por_fecha(session):
-    """Borra grabaciones de una fecha específica[cite: 115]."""
+def borrar_grabaciones_por_fecha():
     fecha = input("Fecha a borrar (YYYY-MM-DD): ")
-    query = "DELETE FROM Tabla6 WHERE Grabacion_fecha = %s"
-    session.execute(query, (fecha,))
+    year, month, day = map(int, fecha.split('-'))
+    fecha_convertida = datetime.date(year, month, day)
+
+    deleteStatementTabla6 = session.prepare(
+        """DELETE FROM Tabla6 WHERE grabacion_fecha = ?"""
+    )
+    session.execute(deleteStatementTabla6, [fecha_convertida, ])
     print(f"Registros del {fecha} eliminados.")
 
 
+# --- Consultar datos de usuario por DNI
+def consultar_datos_usuario():
+    usuario_dni = input("DNI de usuario: ")
+    usuario = consultar_usuario_por_dni(usuario_dni)
+    if(usuario != None):
+        print("Nombre: ",usuario.usuario_nombre)
+        print("Calle_ ",usuario.usuario_calle)
+        print("Ciudad: ",usuario.usuario_ciudad)
+        print()
+    else:
+        print("Usuario no existe para el DNI: " + usuario_dni)
+        print()
 
 
+# --- Consulta tabla 1
+def consulta_tabla1():
+    usuario_nombre = input("Nombre del usuario: ")
+    select = session.prepare(
+        """SELECT * FROM Tabla1 WHERE usuario_nombre = ?"""
+    )
+    filas = session.execute(select, [
+        usuario_nombre, ])
+    for fila in filas:
+        print("DNI de usuario: " + fila.usuario_dni)
+        print("Calle de usuario: " + fila.usuario_calle)
+        print("Ciudad de usuario: " + fila.usuario_ciudad)
 
 
+# --- Consulta tabla 2
+def consulta_tabla2():
+    grabacion_cod = input("Código de grabación: ")
+
+    select = session.prepare(
+        """SELECT * FROM Tabla2 WHERE grabacion_cod = ?"""
+    )
+    filas = session.execute(select, [
+        grabacion_cod, ])
+    for fila in filas:
+        print("DNI de usuario: " + fila.usuario_dni)
+        print("Fecha de grabación: " + str(fila.grabacion_fecha))
+        print("Nombre de usuario: " + fila.usuario_nombre)
+        print("Calle de usuario: " + fila.usuario_calle)
+        print("Ciudad de usuario: " + fila.usuario_ciudad)
+        print("Duración de grabación: " + str(fila.grabacion_duracion))
+        print("Tipo de grabación: " + fila.grabacion_tipo)
+        print()
+
+
+# --- Consulta tabla 3
+def consulta_tabla3():
+    cancion_isrc = input("ISRC de la canción: ")
+
+    select = session.prepare(
+        """SELECT * FROM Tabla3 WHERE cancion_isrc = ?"""
+    )
+    filas = session.execute(select, [
+        cancion_isrc, ])
+    for fila in filas:
+        print("Código de artista: " + str(fila.artista_cod))
+        print("Nombre del país: " + fila.pais_nombre)
+        print("Código del país: " + str(fila.pais_cod))
+        print("Título de la canción: " + fila.cancion_titulo)
+        print()
+
+
+# --- Consulta tabla 4
+def consulta_tabla4():
+    pais_cod = input("Código del país: ")
+    pais_cod = int(pais_cod)
+
+    select = session.prepare(
+        """SELECT * FROM Tabla4 WHERE pais_cod = ?"""
+    )
+    filas = session.execute(select, [
+        pais_cod, ])
+    for fila in filas:
+        print("Código de artista: " + str(fila.artista_cod))
+        print("Nombre del artista: " + fila.artista_nombre)
+        print("Premios del artista: " + ", ".join(sorted(fila.artista_premios)))
+        print("Nombre del país: " + fila.pais_nombre)
+        print()
+
+
+# --- Consulta tabla 5
+def consulta_tabla5():
+    cancion_genero = input("Género de la canción: ")
+
+    select = session.prepare(
+        """SELECT * FROM Tabla5 WHERE cancion_genero = ?"""
+    )
+    filas = session.execute(select, [
+        cancion_genero, ])
+    for fila in filas:
+        print("ISRC de la canción: " + fila.cancion_isrc)
+        print("Título de la canción: " + fila.cancion_titulo)
+        print("Año de la canción: " + str(fila.cancion_anio))
+        print("Géneros de la canción: " + ", ".join(sorted(fila.cancion_generos)))
+        print()
+
+
+# --- Consulta tabla 6
+def consulta_tabla6():
+    grabacion_fecha = input("Fecha de grabación (YYYY-MM-DD): ")
+
+    select = session.prepare(
+        """SELECT * FROM Tabla6 WHERE grabacion_fecha = ?"""
+    )
+    filas = session.execute(select, [
+        grabacion_fecha, ])
+    for fila in filas:
+        print("Código de grabación: "   + fila.grabacion_cod)
+        print("DNI de usuario: "        + fila.usuario_dni)
+        print("Duración de grabación: " + str(fila.grabacion_duracion))
+        print("Tipo de grabación: "     + fila.grabacion_tipo)
+        print("Nombre de usuario: "     + fila.usuario_nombre)
+        print("Calle de usuario: "      + fila.usuario_calle)
+        print("Ciudad de usuario: "     + fila.usuario_ciudad)
+        print()
 
 
 
@@ -229,75 +356,61 @@ cluster = Cluster()
 session = cluster.connect('danelcampana')
 
 
-# test = consultar_usuario_por_dni('47839167')
-# print(test.usuario_dni)
-# print(test.usuario_nombre)
-# print(test.usuario_calle)
-# print(test.usuario_ciudad)
-
-
-# test = consultar_cancion_por_isrc('12345678')
-# print(test.cancion_isrc)
-# print(test.cancion_titulo)
-# print(test.cancion_anio)
-# print(test.cancion_generos)
-
-
 numero = -1
 # Sigue pidiendo operaciones hasta que se introduzca 0
 while (numero != 0):
+    print()
     print("Introduzca un número para ejecutar una de las siguientes operaciones:")
     # print("1. Consultar canción por ISRC")
     # print("2. Consultar usuario por DNI")
-    print("1. Insertar una canción")
-    print("2. Insertar un usuario")
-    print("3. Insertar relación es_guardada_por entre usuario y grabación")
-
-    print("4. Insertar relación entre cliente, producto y pedido (solo id cliente)")
-    print("5. Consultar datos cliente según su id")
-    print("6. Consultar datos de los productos comprados por un cliente dando DNI y nombre")
-    print("7. Consultar datos de los productos que tienen un precio dado")
-    print("8. Actualizar precio producto")
-    print("9. Borrar los pedidos de una fecha")
-    print("10. Consultar los clientes que tienen una direccion asignada")
-    print("11. Actualizar el nombre de clientes en base a su direccion")
+    print("1.  Insertar una canción")
+    print("2.  Insertar un usuario")
+    print("3.  Insertar relación es_guardada_por entre usuario y grabación")
+    print("4.  Insertar relación es_interpretada_por y es_de")
+    print("5.  Actualizar nombre de usuario por DNI")
+    print("6.  Borrar grabaciones por fecha")
+    print("7.  Consultar usuario por DNI")
+    print("8.  Consulta Tabla1")
+    print("9.  Consulta Tabla2")
+    print("10. Consulta Tabla3")
+    print("11. Consulta Tabla4")
+    print("12. Consulta Tabla5")
+    print("13. Consulta Tabla6")
     print("0. Cerrar aplicación")
-
 
 
     numero = int(input())  # Pedimos numero al usuario
 
 
-    # if (numero == 1):
-    #     cancion = consultar_cancion_por_isrc(input("Ingresa el ISRC de la canción: "))
-    #     print(cancion)
-    #     print()
-    # elif (numero == 2):
-    #     usuario = consultar_usuario_por_dni(input("Ingresa el DNI del usuario: "))
-    #     print(usuario)
-    #     print()
     if   (numero == 1):
         insertar_cancion()
     elif (numero == 2):
         insertar_usuario()
     elif (numero == 3):
         insertar_relacion_es_guardada_por()
-
-
-#     elif (numero == 6):
-#         consultaProductosCompradosCliente()
-#     elif (numero == 7):
-#         consultaDatosProductosPrecio()
-#     elif (numero == 8):
-#         actualizarPrecioProducto()
-#     elif (numero == 9):
-#         borrarPedidoFecha()
-#     elif (numero == 10):
-#         print (consultaEjercicio4(input("Dame el nombre de una direccion")))
-#     elif (numero == 11):
-#         actualizacionNombreCliente()
-#     else:
-#         print("Número incorrecto")
+    elif (numero == 4):
+        insertar_relacion_es_interpretada_por_es_de()
+    elif (numero == 5):
+        actualizar_nombre_usuario()
+    elif (numero == 6):
+        borrar_grabaciones_por_fecha()
+    elif (numero == 7):
+        consultar_datos_usuario()
+    elif (numero == 8):
+        consulta_tabla1()
+    elif (numero == 9):
+        consulta_tabla2()
+    elif (numero == 10):
+        consulta_tabla3()
+    elif (numero == 11):
+        consulta_tabla4()
+    elif (numero == 12):
+        consulta_tabla5()
+    elif (numero == 13):
+        consulta_tabla6()
+    
+    else:
+        print("Número incorrecto")
 
 
 cluster.shutdown()  # cerramos conexion
